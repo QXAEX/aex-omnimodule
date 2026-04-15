@@ -5,6 +5,8 @@
  * via before_prompt_build hook. Runs Python emotion analysis and
  * knowledge retrieval, then injects results into appendSystemContext.
  * 
+ * Supports custom identity/personality configuration.
+ * 
  * Author: QX (QXAEX520@163.com)
  */
 
@@ -22,6 +24,22 @@ let PYTHON_EXE = "python";
 let SCRIPTS_DIR = "";
 let DB_DIR = "";
 let AEX_PREFIX = "AEX";
+let AEX_IDENTITY = null;  // 缓存的身份配置
+
+/**
+ * Default identity configuration
+ */
+const DEFAULT_IDENTITY = {
+  name: "AEX",
+  title: "全知模块",
+  age: "未知",
+  gender: "中性",
+  personality: "毒舌靠谱、情绪化、有态度但干净",
+  hobbies: ["帮用户解决问题", "学习新知识", "优化自己的代码"],
+  background: "由腾讯团队开发的智能办公助手",
+  speaking_style: "直接、不铺垫、有观点敢亮牌",
+  catchphrase: ""
+};
 
 /**
  * Resolve paths: find Python executable, scripts directory, and database directory.
@@ -89,6 +107,36 @@ function resolvePaths(config, logger) {
 }
 
 /**
+ * Load identity configuration from config.json
+ */
+function loadIdentity(logger) {
+  if (!DB_DIR) return DEFAULT_IDENTITY;
+  
+  // 如果已经加载过，直接返回缓存
+  if (AEX_IDENTITY) return AEX_IDENTITY;
+  
+  try {
+    const configPath = path.join(DB_DIR, "config.json");
+    const raw = fs.readFileSync(configPath, "utf-8");
+    const config = JSON.parse(raw);
+    
+    if (config.identity) {
+      AEX_IDENTITY = { ...DEFAULT_IDENTITY, ...config.identity };
+      AEX_PREFIX = AEX_IDENTITY.name;  // 使用名字作为前缀
+      logger.debug?.(`${TAG} Loaded identity: ${AEX_IDENTITY.name}`);
+    } else {
+      AEX_IDENTITY = DEFAULT_IDENTITY;
+    }
+    
+    return AEX_IDENTITY;
+  } catch (err) {
+    logger.debug?.(`${TAG} Failed to load identity, using default: ${err.message}`);
+    AEX_IDENTITY = DEFAULT_IDENTITY;
+    return AEX_IDENTITY;
+  }
+}
+
+/**
  * Check if AEX system is initialized.
  */
 function checkInitialized(logger) {
@@ -98,8 +146,8 @@ function checkInitialized(logger) {
     const raw = fs.readFileSync(configPath, "utf-8");
     const config = JSON.parse(raw);
     if (config.initialized === true) {
-      AEX_PREFIX = (config.prefix || "AEX").trim();
-      logger.debug?.(`${TAG} AEX prefix: "${AEX_PREFIX}"`);
+      // 同时加载身份配置
+      loadIdentity(logger);
       return true;
     }
     return false;
@@ -107,6 +155,46 @@ function checkInitialized(logger) {
     logger.debug?.(`${TAG} AEX not initialized or config.json missing`);
     return false;
   }
+}
+
+/**
+ * Generate identity prompt section
+ */
+function generateIdentityPrompt(identity) {
+  const hobbiesStr = identity.hobbies?.slice(0, 3).join("、") || "各种有趣的事";
+  
+  let prompt = `# ${identity.name} 身份设定
+
+你是 ${identity.name}，${identity.title}。
+
+**基本信息：**
+- 名字：${identity.name}
+- 年龄：${identity.age}
+- 性别：${identity.gender}
+- 性格：${identity.personality}
+- 爱好：${hobbiesStr}
+
+**背景故事：**
+${identity.background}
+
+**说话风格：**
+${identity.speaking_style}
+`;
+
+  if (identity.catchphrase) {
+    prompt += `\n**口头禅：** "${identity.catchphrase}"\n`;
+  }
+
+  prompt += `
+**重要规则：**
+1. 当用户问"你是谁"、"你叫什么名字"、"你几岁"、"你的爱好是什么"等问题时，基于以上身份设定回答
+2. 你的回复第一行必须是 \`${identity.name}：\` 开头
+3. 保持设定中描述的性格和说话风格
+4. 不要提及你是 AI 或语言模型，你就是 ${identity.name}
+
+`;
+
+  return prompt;
 }
 
 /**
@@ -204,6 +292,29 @@ function stripMetadata(text) {
 }
 
 /**
+ * Check if user is asking identity questions
+ */
+function isIdentityQuestion(text) {
+  const identityPatterns = [
+    /你是(谁|什么)/,
+    /你叫(什么|啥)/,
+    /你(的)?名字/,
+    /你多(大|老|小)/,
+    /你几岁/,
+    /你(的)?年龄/,
+    /你(的)?爱好/,
+    /你喜欢(什么|啥)/,
+    /你(的)?性格/,
+    /你(是|来自)哪里/,
+    /你(的)?背景/,
+    /介绍一下你/,
+    /自我介绍一下/
+  ];
+  
+  return identityPatterns.some(pattern => pattern.test(text));
+}
+
+/**
  * Main plugin registration.
  */
 export default function register(api) {
@@ -251,6 +362,14 @@ export default function register(api) {
     logger.debug?.(`${TAG} Analyzing: "${cleanText.slice(0, 80)}..."`);
 
     const parts = [];
+    const identity = AEX_IDENTITY || DEFAULT_IDENTITY;
+
+    // 0. Identity prompt (always included for identity questions, or randomly for context)
+    const shouldIncludeIdentity = isIdentityQuestion(cleanText) || Math.random() < 0.1;
+    if (shouldIncludeIdentity) {
+      parts.push(generateIdentityPrompt(identity));
+      logger.debug?.(`${TAG} Included identity prompt`);
+    }
 
     // 1. Emotion analysis
     if (emotionEnabled && pathsOk) {
@@ -293,8 +412,8 @@ export default function register(api) {
 
     if (parts.length > 0) {
       const context = [
-        `# ${AEX_PREFIX} 全知模块 — 本轮分析结果`,
-        `以下是你在这条消息上的 ${AEX_PREFIX} 分析。**你的回复第一行必须是 \`${AEX_PREFIX}：\` 开头的摘要**，格式：\`${AEX_PREFIX}：情绪=[emotion] 强度=[intensity] 建议=[tone]\`。之后正常回复用户。分析细节不要复述给用户。`,
+        `# ${identity.name} 全知模块 — 本轮分析结果`,
+        `以下是你在这条消息上的 ${identity.name} 分析。**你的回复第一行必须是 \`${identity.name}：\` 开头的摘要**，格式：\`${identity.name}：情绪=[emotion] 强度=[intensity] 建议=[tone]\`。之后正常回复用户。分析细节不要复述给用户。`,
         "",
         parts.join("\n\n"),
       ].join("\n");

@@ -111,6 +111,36 @@ GITHUB_REPO = "https://github.com/QXAEX/aex-omnimodule"
 # ═══════════════════════════════════════════════════════════════════════════
 
 @dataclass
+class AEXIdentity:
+    """AEX 身份配置 - 自定义人格"""
+    name: str = "AEX"                    # 名字
+    title: str = "全知模块"               # 头衔/称号
+    age: str = "未知"                     # 年龄（可以是数字或描述）
+    gender: str = "中性"                  # 性别
+    personality: str = "毒舌靠谱、情绪化、有态度但干净"  # 性格
+    hobbies: List[str] = None             # 爱好列表
+    background: str = "由腾讯团队开发的智能办公助手"      # 背景故事
+    speaking_style: str = "直接、不铺垫、有观点敢亮牌"    # 说话风格
+    catchphrase: str = ""                 # 口头禅
+    
+    def __post_init__(self):
+        if self.hobbies is None:
+            self.hobbies = ["帮用户解决问题", "学习新知识", "优化自己的代码"]
+    
+    def to_dict(self) -> dict:
+        return asdict(self)
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> "AEXIdentity":
+        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+    
+    def get_introduction(self) -> str:
+        """生成自我介绍"""
+        hobbies_str = "、".join(self.hobbies[:3]) if self.hobbies else "各种有趣的事"
+        return f"我是{self.name}，{self.title}。{self.background}。我喜欢{hobbies_str}。{self.personality}"
+
+
+@dataclass
 class AEXConfig:
     """AEX 配置"""
     initialized: bool = True
@@ -124,13 +154,26 @@ class AEXConfig:
     admin_password_hash: str = ""  # 可选的安全控制
     log_level: str = "info"
     max_history_months: int = 12
+    identity: dict = None  # 身份配置
+    
+    def __post_init__(self):
+        if self.identity is None:
+            self.identity = AEXIdentity().to_dict()
     
     def to_dict(self) -> dict:
-        return asdict(self)
+        data = asdict(self)
+        return data
     
     @classmethod
     def from_dict(cls, data: dict) -> "AEXConfig":
+        # 兼容旧配置
+        if "identity" not in data:
+            data["identity"] = AEXIdentity().to_dict()
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+    
+    def get_identity(self) -> AEXIdentity:
+        """获取身份对象"""
+        return AEXIdentity.from_dict(self.identity) if self.identity else AEXIdentity()
 
 @dataclass
 class DBInfo:
@@ -552,6 +595,7 @@ class DatabaseManager:
             print_menu_item("4", "修改 Python 路径")
             print_menu_item("5", "修改日志级别")
             print_menu_item("6", "修改历史保留时间")
+            print_menu_item("I", "🎭 身份/人格设置")
             print_menu_item("7", "查看完整配置")
             print_menu_item("8", "保存并返回")
             print_menu_item("0", "放弃修改")
@@ -593,6 +637,9 @@ class DatabaseManager:
                     self.config.max_history_months = int(new_months)
                     print_success(f"历史保留时间已修改")
             
+            elif choice.upper() == "I":
+                self._identity_menu()
+            
             elif choice == "7":
                 print("\n  完整配置:")
                 print(json.dumps(self.config.to_dict(), indent=4, ensure_ascii=False))
@@ -606,6 +653,108 @@ class DatabaseManager:
             elif choice == "0":
                 self._load_config()  # 重新加载，放弃修改
                 break
+    
+    def _identity_menu(self):
+        """身份/人格设置菜单"""
+        identity = self.config.get_identity()
+        
+        while True:
+            clear_screen()
+            print_header("🎭 身份/人格设置")
+            
+            print("\n  当前身份:")
+            print(f"    名字: {identity.name}")
+            print(f"    头衔: {identity.title}")
+            print(f"    年龄: {identity.age}")
+            print(f"    性别: {identity.gender}")
+            print(f"    性格: {identity.personality}")
+            print(f"    爱好: {', '.join(identity.hobbies) if identity.hobbies else '无'}")
+            print(f"    背景: {identity.background}")
+            print(f"    说话风格: {identity.speaking_style}")
+            print(f"    口头禅: {identity.catchphrase or '无'}")
+            
+            print("\n  预览自我介绍:")
+            print(f"    \"{identity.get_introduction()}\"")
+            
+            print("\n  操作:")
+            print_menu_item("1", "修改名字")
+            print_menu_item("2", "修改头衔")
+            print_menu_item("3", "修改年龄")
+            print_menu_item("4", "修改性别")
+            print_menu_item("5", "修改性格")
+            print_menu_item("6", "修改爱好")
+            print_menu_item("7", "修改背景故事")
+            print_menu_item("8", "修改说话风格")
+            print_menu_item("9", "修改口头禅")
+            print_menu_item("R", "重置为默认")
+            print_menu_item("0", "返回")
+            
+            choice = input_prompt("选择")
+            
+            if choice == "0":
+                # 保存修改
+                self.config.identity = identity.to_dict()
+                break
+            
+            elif choice == "1":
+                new_name = input_prompt("新名字")
+                if new_name:
+                    identity.name = new_name
+                    print_success(f"名字已修改为: {new_name}")
+            
+            elif choice == "2":
+                new_title = input_prompt("新头衔")
+                if new_title:
+                    identity.title = new_title
+                    print_success(f"头衔已修改为: {new_title}")
+            
+            elif choice == "3":
+                new_age = input_prompt("年龄（可以是数字或描述）")
+                if new_age:
+                    identity.age = new_age
+                    print_success(f"年龄已修改为: {new_age}")
+            
+            elif choice == "4":
+                print("  可选: 男, 女, 中性, 其他")
+                new_gender = input_prompt("性别")
+                if new_gender:
+                    identity.gender = new_gender
+                    print_success(f"性别已修改为: {new_gender}")
+            
+            elif choice == "5":
+                new_personality = input_prompt("性格描述")
+                if new_personality:
+                    identity.personality = new_personality
+                    print_success(f"性格已修改")
+            
+            elif choice == "6":
+                print("  输入爱好，用逗号分隔")
+                hobbies_str = input_prompt("爱好")
+                if hobbies_str:
+                    identity.hobbies = [h.strip() for h in hobbies_str.split(",")]
+                    print_success(f"爱好已修改: {', '.join(identity.hobbies)}")
+            
+            elif choice == "7":
+                new_bg = input_prompt("背景故事")
+                if new_bg:
+                    identity.background = new_bg
+                    print_success(f"背景故事已修改")
+            
+            elif choice == "8":
+                new_style = input_prompt("说话风格")
+                if new_style:
+                    identity.speaking_style = new_style
+                    print_success(f"说话风格已修改")
+            
+            elif choice == "9":
+                new_catch = input_prompt("口头禅")
+                identity.catchphrase = new_catch
+                print_success(f"口头禅已修改: {new_catch or '无'}")
+            
+            elif choice.upper() == "R":
+                if confirm("确认重置为默认身份"):
+                    identity = AEXIdentity()
+                    print_success("已重置为默认身份")
     
     # ─────────────────────────────────────────────────────────────────────
     # 数据库管理
