@@ -40,63 +40,74 @@ Default prefix: `AEX` (configurable via `config.json` → `prefix` field)
 
 Example: `AEX：情绪检测完成 — happy (强度 30%)，建议语气：轻松自然`
 
-## Installation
+## 🚀 安装指南
 
-### 1. Clone & Place
+本技能分为两个部分，建议都安装以获得完整体验：
 
-Place this module at your desired location, e.g.:
+### ✅ 已自动完成（技能部分）
+SKILL.md 和 Python 脚本已随 SkillHub 安装到位，无需手动操作。
 
-```
-/path/to/your/AEXModule/
-├── skill/
-│   ├── SKILL.md
-│   └── scripts/
-│       ├── db_manager.py
-│       ├── emotion_analyzer.py
-│       ├── init_system.py
-│       ├── search_learn.py
-│       └── security.py
-├── aex-context-plugin/
-│   ├── dist/index.js          # compiled plugin
-│   ├── package.json
-│   └── openclaw.plugin.json
-└── db/
-    └── config.example.json    # copy to config.json
-```
+### 🔧 需要手动安装（上下文插件 — 自动情绪分析）
 
-### 2. Initialize
+> 这个插件会在每次对话前自动运行情绪分析和知识检索，无需手动调用。
+> 如果不安装，仍可通过手动执行 Python 脚本使用基础功能。
+
+**第一步：复制插件文件**
+
+将插件目录复制到你的 OpenClaw 扩展目录：
 
 ```bash
-python /path/to/AEXModule/skill/scripts/init_system.py
+# 将下方路径中的 <skill-install-dir> 替换为本技能的实际安装位置
+# 通常在 OpenClaw skills 目录下，例如：
+#   Windows: D:\QClaw\resources\openclaw\config\skills\aex-omnimodule\
+#   macOS/Linux: ~/.openclaw/skills/aex-omnimodule/
+copy "<skill-install-dir>\aex-context-plugin" "<openclaw-config>\extensions\aex-context-plugin" /E
 ```
 
-This creates `db/config.json` and sets up the database structure.
-
-### 3. Install OpenClaw Plugin
-
-Copy `aex-context-plugin/` to your OpenClaw extensions directory:
-
+插件目录结构：
 ```
-<openclaw-config>/extensions/aex-context-plugin/
+aex-context-plugin/
+├── dist/index.js          # 编译后的插件代码
+├── package.json           # 插件元数据
+└── openclaw.plugin.json   # OpenClaw 插件配置
 ```
 
-Then enable:
+**第二步：启用插件**
 
 ```bash
 openclaw plugins enable aex-context-plugin
 openclaw gateway restart
 ```
 
-### 4. Configure (Optional)
+**第三步：验证**
 
-In `db/config.json`, you can set:
+重启后发一条消息，如果 AI 回复的第一行以 `AEX：` 开头，说明插件已生效。
 
-| Field | Default | Description |
+### 🗄️ 数据库初始化（首次使用）
+
+```bash
+python <skill-install-dir>/scripts/init_system.py
+```
+
+这会创建 `db/config.json` 和数据库结构。
+
+### ⚙️ 可选配置
+
+在 `db/config.json` 中：
+
+| 字段 | 默认值 | 说明 |
 |-------|---------|-------------|
-| `prefix` | `"AEX"` | Output prefix for analysis results |
-| `max_db_size_gb` | `1.5` | Max size per database file |
-| `max_attempts` | `10` | Max password failures before lockout |
-| `lockout_seconds` | `3600` | Lockout duration after max failures |
+| `prefix` | `"AEX"` | 分析结果输出前缀 |
+| `max_db_size_gb` | `1.5` | 单库上限 (GB) |
+| `max_attempts` | `10` | 密码错误锁定次数 |
+| `lockout_seconds` | `3600` | 锁定时长 (秒) |
+
+### ❓ 找不到安装路径？
+
+在 OpenClaw 中运行以下命令查看技能安装位置：
+```bash
+openclaw skills list | findstr aex
+```
 
 ## Database Structure
 
