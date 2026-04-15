@@ -1,0 +1,6 @@
+node_modules/
+db/config.json
+db/master.db
+db/2026_2027/
+db/DESIGN_DOC.txt
+_temp/

@@ -1,0 +1,40 @@
+{
+  "id": "aex-context-plugin",
+  "name": "AEX Context Plugin",
+  "description": "AEX全知模块上下文注入插件 - 在每次LLM调用前自动执行情绪分析和知识检索，将结果注入系统提示",
+  "version": "1.0.0",
+  "kind": "context-engine",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "是否启用AEX上下文注入"
+      },
+      "pythonPath": {
+        "type": "string",
+        "description": "Python解释器路径（默认自动检测）"
+      },
+      "scriptsDir": {
+        "type": "string",
+        "description": "AEX脚本目录路径（默认自动检测）"
+      },
+      "dbDir": {
+        "type": "string",
+        "description": "AEX数据库目录路径（默认自动检测）"
+      },
+      "emotionAnalysis": {
+        "type": "boolean",
+        "default": true,
+        "description": "是否启用情绪分析"
+      },
+      "knowledgeSearch": {
+        "type": "boolean",
+        "default": true,
+        "description": "是否启用知识检索"
+      }
+    }
+  }
+}

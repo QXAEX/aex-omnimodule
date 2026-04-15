@@ -1,0 +1,8 @@
+{
+  "name": "aex-context-plugin",
+  "version": "1.0.0",
+  "description": "AEX Omnimodule context injection plugin",
+  "type": "module",
+  "main": "dist/index.js",
+  "dependencies": {}
+}
