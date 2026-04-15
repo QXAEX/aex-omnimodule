@@ -55,6 +55,7 @@ DATABASES: Dict[str, Dict[str, Any]] = {
         "filename": "master.db",
         "description": "系统核心配置与注册信息",
         "readonly": False,
+        "sealed": False,
     },
     "emotion": {
         "name": "情绪记忆库",
@@ -62,6 +63,7 @@ DATABASES: Dict[str, Dict[str, Any]] = {
         "description": "情绪分析历史记录与模式",
         "readonly": False,
         "rotated": True,  # 按月轮转
+        "sealed": False,
     },
     "knowledge": {
         "name": "知识存储库",
@@ -69,6 +71,7 @@ DATABASES: Dict[str, Dict[str, Any]] = {
         "description": "检索到的知识与学习记录",
         "readonly": False,
         "rotated": True,
+        "sealed": False,
     },
     "conversation": {
         "name": "对话存档库",
@@ -76,20 +79,25 @@ DATABASES: Dict[str, Dict[str, Any]] = {
         "description": "完整对话历史记录",
         "readonly": False,
         "rotated": True,
+        "sealed": False,
     },
     "analytics": {
         "name": "统计分析库",
         "filename": "analytics.db",
         "description": "使用统计与性能分析",
         "readonly": False,
+        "sealed": False,
     },
-    "backup": {
-        "name": "备份归档库",
-        "filename": "backup_{year}_{month}.db",
-        "description": "自动备份与归档数据",
-        "readonly": True,
-        "rotated": True,
-    },
+}
+
+# 周期归档配置
+ARCHIVE_CONFIG = {
+    "cycle_years": 2,  # 每2年一个周期
+    "current_cycle": "2026_2027",  # 当前周期
+    "archive_dir": "archive",  # 归档目录名
+    "sealed_suffix": "_sealed",  # 封闭数据库后缀
+    "compression": True,  # 启用 SQLite 压缩
+    "wal_mode": True,  # 启用 WAL 模式提升性能
 }
 
 # 依赖包
@@ -746,6 +754,7 @@ class DatabaseManager:
             print_menu_item("2", "执行 SQL")
             print_menu_item("3", "导出数据")
             print_menu_item("4", "修复/优化")
+            print_menu_item("5", "周期归档管理")
             print_menu_item("0", "返回")
             
             choice = input_prompt("选择")
@@ -760,6 +769,8 @@ class DatabaseManager:
                 self._export_db(db)
             elif choice == "4":
                 self._optimize_db(db)
+            elif choice == "5":
+                self._archive_menu()
     
     def _browse_data_paginated(self, db: DBInfo, table_name: Optional[str] = None):
         """分页浏览数据"""
@@ -1041,6 +1052,328 @@ class DatabaseManager:
         print(f"\n  已删除 {len(deleted)} 个旧数据库文件:")
         for name in deleted:
             print(f"    - {name}")
+        
+        input("\n按 Enter 继续...")
+    
+    # ─────────────────────────────────────────────────────────────────────
+    # 周期归档与 SQLite 压缩
+    # ─────────────────────────────────────────────────────────────────────
+    
+    def _get_cycle_for_date(self, year: int, month: int) -> str:
+        """获取日期所属的周期"""
+        cycle_start = (year // ARCHIVE_CONFIG["cycle_years"]) * ARCHIVE_CONFIG["cycle_years"]
+        cycle_end = cycle_start + ARCHIVE_CONFIG["cycle_years"] - 1
+        return f"{cycle_start}_{cycle_end}"
+    
+    def _get_current_cycle(self) -> str:
+        """获取当前周期"""
+        year, month = get_current_year_month()
+        return self._get_cycle_for_date(year, month)
+    
+    def _get_archive_dir(self, cycle: str) -> Path:
+        """获取归档目录"""
+        archive_dir = self.db_dir / ARCHIVE_CONFIG["archive_dir"] / cycle
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        return archive_dir
+    
+    def _is_cycle_closed(self, cycle: str) -> bool:
+        """检查周期是否已封闭"""
+        archive_dir = self._get_archive_dir(cycle)
+        marker = archive_dir / ".sealed"
+        return marker.exists()
+    
+    def _seal_cycle(self, cycle: str) -> bool:
+        """
+        封闭周期 - 使用 SQLite VACUUM INTO 压缩归档
+        封闭后的数据库可直接读取，无需解压
+        """
+        print_header(f"封闭周期 {cycle}")
+        
+        if self._is_cycle_closed(cycle):
+            print_warning(f"周期 {cycle} 已经封闭")
+            return False
+        
+        archive_dir = self._get_archive_dir(cycle)
+        
+        # 查找该周期的所有数据库
+        cycle_dbs = []
+        for file in self.db_dir.glob("*.db"):
+            match = re.search(r'(\d{4})_(\d{2})', file.name)
+            if match:
+                file_year = int(match.group(1))
+                file_cycle = self._get_cycle_for_date(file_year, 1)
+                if file_cycle == cycle and file.name != "master.db":
+                    cycle_dbs.append(file)
+        
+        if not cycle_dbs:
+            print_warning(f"周期 {cycle} 没有需要归档的数据库")
+            return False
+        
+        print(f"\n  发现 {len(cycle_dbs)} 个数据库需要归档:")
+        for db_file in cycle_dbs:
+            size = format_bytes(db_file.stat().st_size)
+            print(f"    - {db_file.name} ({size})")
+        
+        if not confirm(f"确认封闭周期 {cycle}"):
+            return False
+        
+        # 压缩归档每个数据库
+        sealed_files = []
+        for db_file in cycle_dbs:
+            print(f"\n  正在处理: {db_file.name}")
+            
+            # 创建压缩版本（使用 VACUUM INTO）
+            sealed_name = db_file.stem + ARCHIVE_CONFIG["sealed_suffix"] + ".db"
+            sealed_path = archive_dir / sealed_name
+            
+            try:
+                # 使用 VACUUM INTO 创建优化压缩的数据库
+                with db_connection(db_file, readonly=True) as conn:
+                    conn.execute(f"VACUUM INTO '{sealed_path}'")
+                
+                # 设置只读权限（Windows）
+                os.chmod(sealed_path, 0o444)
+                
+                original_size = db_file.stat().st_size
+                sealed_size = sealed_path.stat().st_size
+                ratio = (1 - sealed_size / original_size) * 100
+                
+                print_success(f"压缩完成: {format_bytes(original_size)} → {format_bytes(sealed_size)} (节省 {ratio:.1f}%)")
+                sealed_files.append((db_file, sealed_path))
+                
+            except Exception as e:
+                print_error(f"压缩失败: {e}")
+                return False
+        
+        # 创建封闭标记
+        marker = archive_dir / ".sealed"
+        with open(marker, 'w') as f:
+            f.write(f"sealed_at: {datetime.now().isoformat()}\n")
+            f.write(f"databases: {len(sealed_files)}\n")
+            for orig, sealed in sealed_files:
+                f.write(f"  - {orig.name} -> {sealed.name}\n")
+        
+        # 移动原始文件到归档目录（可选）
+        if confirm("是否将原始数据库移动到归档目录（推荐）"):
+            for orig, sealed in sealed_files:
+                dest = archive_dir / orig.name
+                shutil.move(str(orig), str(dest))
+                print_success(f"移动: {orig.name} -> archive/{cycle}/")
+        
+        print(f"\n  周期 {cycle} 已成功封闭！")
+        print(f"  归档位置: {archive_dir}")
+        print(f"  封闭数据库可直接读取，无需解压")
+        
+        return True
+    
+    def _unseal_cycle(self, cycle: str) -> bool:
+        """
+        解封周期 - 实际上只是复制回工作目录
+        因为封闭数据库本身就是标准 SQLite 格式
+        """
+        print_header(f"解封周期 {cycle}")
+        
+        if not self._is_cycle_closed(cycle):
+            print_warning(f"周期 {cycle} 未封闭")
+            return False
+        
+        archive_dir = self._get_archive_dir(cycle)
+        
+        # 查找封闭的数据库
+        sealed_files = list(archive_dir.glob(f"*{ARCHIVE_CONFIG['sealed_suffix']}.db"))
+        
+        if not sealed_files:
+            print_warning(f"没有找到封闭的数据库")
+            return False
+        
+        print(f"\n  发现 {len(sealed_files)} 个封闭数据库:")
+        for sealed in sealed_files:
+            print(f"    - {sealed.name}")
+        
+        if not confirm("确认解封（复制回工作目录）"):
+            return False
+        
+        for sealed in sealed_files:
+            # 移除 _sealed 后缀
+            original_name = sealed.stem.replace(ARCHIVE_CONFIG["sealed_suffix"], "") + ".db"
+            dest = self.db_dir / original_name
+            
+            # 复制并恢复写权限
+            shutil.copy2(sealed, dest)
+            os.chmod(dest, 0o644)
+            
+            print_success(f"解封: {sealed.name} -> {original_name}")
+        
+        print(f"\n  周期 {cycle} 已解封")
+        return True
+    
+    def _load_sealed_db(self, cycle: str, db_name: str) -> Optional[Path]:
+        """
+        加载封闭的数据库 - 直接返回路径，SQLite 可直接读取
+        """
+        archive_dir = self._get_archive_dir(cycle)
+        
+        # 尝试封闭版本
+        sealed_path = archive_dir / db_name.replace(".db", ARCHIVE_CONFIG["sealed_suffix"] + ".db")
+        if sealed_path.exists():
+            return sealed_path
+        
+        # 尝试原始版本
+        original_path = archive_dir / db_name
+        if original_path.exists():
+            return original_path
+        
+        return None
+    
+    def _archive_menu(self):
+        """归档管理菜单"""
+        while True:
+            clear_screen()
+            print_header("周期归档管理")
+            
+            current_cycle = self._get_current_cycle()
+            print(f"\n  当前周期: {current_cycle}")
+            print(f"  周期长度: {ARCHIVE_CONFIG['cycle_years']} 年")
+            
+            # 列出所有周期
+            archive_root = self.db_dir / ARCHIVE_CONFIG["archive_dir"]
+            if archive_root.exists():
+                cycles = [d.name for d in archive_root.iterdir() if d.is_dir()]
+            else:
+                cycles = []
+            
+            print(f"\n  已归档周期:")
+            for cycle in sorted(cycles):
+                status = "🔒 已封闭" if self._is_cycle_closed(cycle) else "📂 开放"
+                print(f"    [{cycle}] {status}")
+            
+            print("\n  操作:")
+            print_menu_item("1", "封闭当前周期之前的周期")
+            print_menu_item("2", "解封指定周期")
+            print_menu_item("3", "查看归档详情")
+            print_menu_item("4", "手动封闭指定周期")
+            print_menu_item("5", "压缩优化数据库")
+            print_menu_item("0", "返回")
+            
+            choice = input_prompt("选择")
+            
+            if choice == "0":
+                break
+            elif choice == "1":
+                self._auto_seal_old_cycles()
+            elif choice == "2":
+                cycle = input_prompt("周期名称 (如 2024_2025)")
+                if cycle:
+                    self._unseal_cycle(cycle)
+                    input("\n按 Enter 继续...")
+            elif choice == "3":
+                self._view_archive_details()
+            elif choice == "4":
+                cycle = input_prompt("周期名称")
+                if cycle:
+                    self._seal_cycle(cycle)
+                    input("\n按 Enter 继续...")
+            elif choice == "5":
+                self._compress_all_dbs()
+    
+    def _auto_seal_old_cycles(self):
+        """自动封闭旧周期"""
+        current_cycle = self._get_current_cycle()
+        current_start = int(current_cycle.split("_")[0])
+        
+        # 查找需要封闭的周期
+        cycles_to_seal = []
+        for file in self.db_dir.glob("*.db"):
+            match = re.search(r'(\d{4})_(\d{2})', file.name)
+            if match and file.name != "master.db":
+                year = int(match.group(1))
+                cycle = self._get_cycle_for_date(year, 1)
+                if cycle != current_cycle and not self._is_cycle_closed(cycle):
+                    if cycle not in cycles_to_seal:
+                        cycles_to_seal.append(cycle)
+        
+        if not cycles_to_seal:
+            print_info("没有需要封闭的周期")
+            return
+        
+        print(f"\n  发现 {len(cycles_to_seal)} 个需要封闭的周期:")
+        for cycle in cycles_to_seal:
+            print(f"    - {cycle}")
+        
+        if confirm("确认封闭这些周期"):
+            for cycle in cycles_to_seal:
+                self._seal_cycle(cycle)
+    
+    def _view_archive_details(self):
+        """查看归档详情"""
+        clear_screen()
+        print_header("归档详情")
+        
+        archive_root = self.db_dir / ARCHIVE_CONFIG["archive_dir"]
+        if not archive_root.exists():
+            print_info("没有归档数据")
+            input("\n按 Enter 继续...")
+            return
+        
+        for cycle_dir in sorted(archive_root.iterdir()):
+            if not cycle_dir.is_dir():
+                continue
+            
+            print(f"\n  📁 {cycle_dir.name}")
+            
+            if self._is_cycle_closed(cycle_dir.name):
+                print("    状态: 🔒 已封闭 (只读)")
+            else:
+                print("    状态: 📂 开放")
+            
+            # 列出文件
+            db_files = list(cycle_dir.glob("*.db"))
+            if db_files:
+                total_size = sum(f.stat().st_size for f in db_files)
+                print(f"    数据库: {len(db_files)} 个")
+                print(f"    总大小: {format_bytes(total_size)}")
+                for f in db_files:
+                    size = format_bytes(f.stat().st_size)
+                    sealed_mark = " 🔒" if ARCHIVE_CONFIG["sealed_suffix"] in f.name else ""
+                    print(f"      - {f.name} ({size}){sealed_mark}")
+        
+        input("\n按 Enter 继续...")
+    
+    def _compress_all_dbs(self):
+        """压缩所有数据库"""
+        print_header("压缩优化所有数据库")
+        
+        dbs = self._list_databases()
+        total_before = 0
+        total_after = 0
+        
+        for db in dbs:
+            if not db.filepath.exists():
+                continue
+            
+            original_size = db.filepath.stat().st_size
+            total_before += original_size
+            
+            print(f"\n  压缩: {db.chinese_name}")
+            try:
+                with db_connection(db.filepath) as conn:
+                    conn.execute("VACUUM")
+                    conn.execute("ANALYZE")
+                
+                new_size = db.filepath.stat().st_size
+                total_after += new_size
+                saved = original_size - new_size
+                ratio = saved / original_size * 100 if original_size > 0 else 0
+                
+                print_success(f"{format_bytes(original_size)} → {format_bytes(new_size)} (节省 {ratio:.1f}%)")
+            except Exception as e:
+                print_error(f"压缩失败: {e}")
+                total_after += original_size
+        
+        print(f"\n  总计:")
+        print(f"    压缩前: {format_bytes(total_before)}")
+        print(f"    压缩后: {format_bytes(total_after)}")
+        print(f"    节省: {format_bytes(total_before - total_after)}")
         
         input("\n按 Enter 继续...")
     
