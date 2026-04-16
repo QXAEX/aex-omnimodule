@@ -40,8 +40,8 @@ from contextlib import contextmanager
 # 配置常量
 # ═══════════════════════════════════════════════════════════════════════════
 
-AEX_VERSION = "1.0.0"
-AEX_ADMIN_VERSION = "1.0.0"
+AEX_VERSION = "1.0.1"
+AEX_ADMIN_VERSION = "1.0.1"
 
 # 默认路径
 DEFAULT_AEX_DIR = Path("D:/QClawAEXModule")
