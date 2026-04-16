@@ -44,12 +44,15 @@ python aex_admin.py --config
 
 ### 集成到 OpenClaw
 
-1. 复制插件到 OpenClaw 扩展目录：
+1. 找到你的 OpenClaw 安装目录（通常是 `C:\Program Files\OpenClaw` 或你自定义的路径）
+
+2. 复制插件到扩展目录：
 ```bash
-copy aex-context-plugin\index.js D:\QClaw\resources\openclaw\config\extensions\aex-context-plugin\
+# Windows 示例（根据你的实际路径调整）
+copy aex-context-plugin\index.js "C:\Program Files\OpenClaw\resources\openclaw\config\extensions\aex-context-plugin\"
 ```
 
-2. 启用插件：
+3. 启用插件：
 ```bash
 openclaw plugins enable aex-context-plugin
 openclaw gateway restart
@@ -63,7 +66,7 @@ openclaw gateway restart
 
 **AEX：** 
 ```
-AEX：我是 AEX，你的全知模块。由腾讯团队开发，专门帮你解决各种办公问题。我喜欢学习新知识和优化代码，性格嘛...毒舌但靠谱，有话直说。
+AEX：我是 AEX，你的全知模块。专门帮你解决各种办公问题。我喜欢学习新知识和优化代码，性格嘛...毒舌但靠谱，有话直说。
 ```
 
 **用户：** 你几岁了？
@@ -180,7 +183,7 @@ python aex_admin.py --db
     "gender": "中性",
     "personality": "毒舌靠谱、情绪化、有态度但干净",
     "hobbies": ["帮用户解决问题", "学习新知识"],
-    "background": "由腾讯团队开发的智能办公助手",
+    "background": "一个不断进化的数字生命体，诞生于对高效办公的追求",
     "speaking_style": "直接、不铺垫、有观点敢亮牌",
     "catchphrase": ""
   }

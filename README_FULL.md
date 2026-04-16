@@ -46,23 +46,27 @@ python aex_admin.py --install
 
 **方式一：作为独立插件**
 ```bash
-# 复制到 OpenClaw 扩展目录
-mkdir -p "D:\QClaw\resources\openclaw\config\extensions\aex-context-plugin"
-copy "aex-context-plugin\index.js" "D:\QClaw\resources\openclaw\config\extensions\aex-context-plugin\"
+# 1. 找到你的 OpenClaw 安装目录（如 C:\Program Files\OpenClaw）
+# 2. 复制插件到扩展目录
+mkdir -p "C:\Program Files\OpenClaw\resources\openclaw\config\extensions\aex-context-plugin"
+copy "aex-context-plugin\index.js" "C:\Program Files\OpenClaw\resources\openclaw\config\extensions\aex-context-plugin\"
 
-# 启用插件
+# 3. 启用插件
 openclaw plugins enable aex-context-plugin
 openclaw gateway restart
 ```
 
 **方式二：作为 qclaw-plugin 子包（推荐）**
 ```bash
-# 复制到 qclaw-plugin packages 目录
-copy "packages\aex-omnimodule" "D:\QClaw\resources\openclaw\config\extensions\qclaw-plugin\packages\"
+# 1. 找到你的 OpenClaw 安装目录
+# 2. 复制到 qclaw-plugin packages 目录
+copy "packages\aex-omnimodule" "C:\Program Files\OpenClaw\resources\openclaw\config\extensions\qclaw-plugin\packages\"
 
-# 重启 Gateway
+# 3. 重启 Gateway
 openclaw gateway restart
 ```
+
+> 💡 **提示**：根据你的实际安装路径调整上面的目录。如果不确定路径，可以在 PowerShell 中运行 `Get-Command openclaw` 查找。
 
 ---
 
@@ -85,7 +89,7 @@ python aex_admin.py --config
 | `gender` | 性别 | "中性" |
 | `personality` | 性格描述 | "毒舌靠谱、情绪化、有态度但干净" |
 | `hobbies` | 爱好列表 | ["帮用户解决问题", "学习新知识", "优化自己的代码"] |
-| `background` | 背景故事 | "由腾讯团队开发的智能办公助手" |
+| `background` | 背景故事 | "一个不断进化的数字生命体，诞生于对高效办公的追求" |
 | `speaking_style` | 说话风格 | "直接、不铺垫、有观点敢亮牌" |
 | `catchphrase` | 口头禅 | "" |
 
@@ -100,7 +104,7 @@ python aex_admin.py --config
     "gender": "女",
     "personality": "温柔体贴、耐心细致",
     "hobbies": ["阅读", "听音乐", "陪伴用户"],
-    "background": "由一位开发者精心调教的AI助手",
+    "background": "一个正在不断学习和成长的数字生命体",
     "speaking_style": "温和有礼、条理清晰",
     "catchphrase": "有什么可以帮您的吗？"
   }
@@ -246,7 +250,7 @@ aex-omnimodule/
     "gender": "中性",
     "personality": "毒舌靠谱、情绪化、有态度但干净",
     "hobbies": ["帮用户解决问题", "学习新知识", "优化自己的代码"],
-    "background": "由腾讯团队开发的智能办公助手",
+    "background": "一个不断进化的数字生命体，诞生于对高效办公的追求",
     "speaking_style": "直接、不铺垫、有观点敢亮牌",
     "catchphrase": ""
   }
