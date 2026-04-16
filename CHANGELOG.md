@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Format: `(year // 2) * 2` → `2026_2027`, `2028_2029`, etc.
   - Config example updated: `current_period: "auto"`
 - **Database size warnings** in status view - shows databases exceeding 1GB
+- **Database schema repair tool** (`fix_database_schema_v2.py`)
+  - Automatic detection and repair of inconsistent database schemas
+  - Field renaming: `credibility` → `credibility_score`
+  - Type conversion: `weight REAL` → `weight INTEGER`
+  - Adds missing `updated_at` field
+  - Creates backup files before modification
 
 ### Fixed
 - **Unified database naming** between `aex_admin.py` and `db_manager.py`
@@ -24,11 +30,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Standardized naming: `core_memory_YYYY_MM.db`, `core_knowledge_YYYY_MM.db`, `conversations_YYYY_MM.db`
 - **Directory structure alignment** - Both managers now use same archive path structure
 - **Period calculation consistency** - Fixed off-by-one error in cycle end year
+- **Database schema inconsistencies** - Unified table structure across all databases
+  - Fixed `CPlusPlus.db`, `Rust.db`, `Web.db` schema mismatches
+  - Standardized `entries` table structure
+  - Preserved all existing data during migration
+- **Search functionality** - Knowledge retrieval now works correctly with repaired databases
 
 ### Changed
 - `db_manager.py` now uses same path format as `aex_admin.py`
 - Archive directory structure: `db/archive/{cycle}/` instead of `db/{period}/archive/`
 - Status display now shows current cycle information
+- Updated `.gitignore` to exclude `.db.backup` files
 
 ---
 

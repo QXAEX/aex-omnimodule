@@ -5,6 +5,7 @@ db/2026_2027/
 db/DESIGN_DOC.txt
 _temp/
 *.db
+*.db.backup
 db_backup_*/
 __pycache__/
 *.pyc
