@@ -32,6 +32,9 @@ class DatabaseManager:
     def _ensure_structure(self):
         """确保目录结构存在"""
         period = self.get_current_period()
+        # 创建周期目录（用于通用数据库）
+        (self.root_dir / period).mkdir(parents=True, exist_ok=True)
+        # 创建归档目录
         (self.root_dir / "archive" / period).mkdir(parents=True, exist_ok=True)
     
     def get_current_period(self) -> str:
@@ -42,23 +45,39 @@ class DatabaseManager:
         return f"{cycle_start}_{cycle_end}"
     
     def get_db_path(self, db_type: str, year: int = None, month: int = None) -> Path:
-        """获取数据库路径（与 aex_admin.py 保持一致）"""
-        if year is None:
-            year = datetime.now().year
-        if month is None:
-            month = datetime.now().month
+        """获取数据库路径（新架构：主题库在根目录，通用库在周期目录）"""
+        # 系统数据库类型（放在周期目录下）
+        system_dbs = {
+            "emotion": "core_memory",
+            "knowledge": "general",  # 原 core_knowledge 重命名为 general
+            "core_knowledge": "general",  # 兼容旧调用
+            "conversation": "conversations",
+            "conversations": "conversations"  # 兼容 search_learn.py 的调用
+        }
         
-        # 使用统一的命名规则，与 aex_admin.py 保持一致
-        if db_type == "emotion":
-            db_name = f"core_memory_{year}_{month:02d}.db"
-        elif db_type == "knowledge":
-            db_name = f"core_knowledge_{year}_{month:02d}.db"
-        elif db_type == "conversation":
-            db_name = f"conversations_{year}_{month:02d}.db"
+        # 是否为系统数据库
+        is_system = db_type in system_dbs
+        
+        if is_system:
+            # 系统数据库放在当前周期目录下
+            period = self.get_current_period()
+            base_name = system_dbs[db_type]
+            
+            # 对话数据库按月分库，其他系统数据库不按月分
+            if db_type in ["conversation", "conversations"]:
+                if year is None:
+                    year = datetime.now().year
+                if month is None:
+                    month = datetime.now().month
+                db_name = f"{base_name}_{year}_{month:02d}.db"
+            else:
+                db_name = f"{base_name}.db"
+            
+            return self.root_dir / period / db_name
         else:
-            db_name = f"{db_type}_{year}_{month:02d}.db"
-        
-        return self.root_dir / db_name
+            # 主题数据库放在根目录（如 Flutter.db, Python.db）
+            # 忽略 year/month 参数
+            return self.root_dir / f"{db_type}.db"
     
     def create_database(self, db_type: str, year: int = None, month: int = None) -> Path:
         """创建新数据库"""
@@ -94,6 +113,9 @@ class DatabaseManager:
         """)
         
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_entries_created ON entries(created_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_entries_weight ON entries(weight DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_entries_credibility ON entries(credibility_score DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_entries_source ON entries(source)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_entry ON tags(entry_id)")
         
         conn.commit()
@@ -201,6 +223,7 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         if keyword:
+            # 简化搜索：直接使用 LIKE 匹配
             cursor.execute("""
                 SELECT * FROM entries 
                 WHERE content LIKE ? 
