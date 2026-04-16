@@ -93,11 +93,17 @@ DATABASES: Dict[str, Dict[str, Any]] = {
 # 周期归档配置
 ARCHIVE_CONFIG = {
     "cycle_years": 2,  # 每2年一个周期
-    "current_cycle": "2026_2027",  # 当前周期
     "archive_dir": "archive",  # 归档目录名
     "sealed_suffix": "_sealed",  # 封闭数据库后缀
     "compression": True,  # 启用 SQLite 压缩
     "wal_mode": True,  # 启用 WAL 模式提升性能
+
+def get_current_cycle() -> str:
+    """根据当前年份自动计算周期（如 2026_2027, 2028_2029）"""
+    current_year = datetime.now().year
+    cycle_start = (current_year // 2) * 2
+    cycle_end = cycle_start + 1
+    return f"{cycle_start}_{cycle_end}"
 }
 
 # 依赖包
@@ -1546,6 +1552,7 @@ class DatabaseManager:
         print(f"    前缀: {self.config.prefix}")
         print(f"    情绪分析: {'开启' if self.config.emotion_enabled else '关闭'}")
         print(f"    知识检索: {'开启' if self.config.knowledge_enabled else '关闭'}")
+        print(f"    当前周期: {self._get_current_cycle()} (每2年一个周期)")
         
         print("\n  🗄️ 数据库状态:")
         dbs = self._list_databases()

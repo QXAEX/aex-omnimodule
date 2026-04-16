@@ -1,6 +1,7 @@
 {
   "initialized": false,
-  "current_period": "2026_2027",
+  "_comment": "current_period 由系统自动计算，每2年一个周期（如2026_2027, 2028_2029）",
+  "current_period": "auto",
   "max_db_size_gb": 1.5,
   "max_attempts": 10,
   "lockout_seconds": 3600,
