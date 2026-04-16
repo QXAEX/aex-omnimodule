@@ -125,7 +125,7 @@ class AEXIdentity:
     gender: str = "中性"                  # 性别
     personality: str = "毒舌靠谱、情绪化、有态度但干净"  # 性格
     hobbies: List[str] = None             # 爱好列表
-    background: str = "由腾讯团队开发的智能办公助手"      # 背景故事
+    background: str = "由个人作者QX开发的智能助手 (联系方式: 13143713096)"      # 背景故事
     speaking_style: str = "直接、不铺垫、有观点敢亮牌"    # 说话风格
     catchphrase: str = ""                 # 口头禅
     
