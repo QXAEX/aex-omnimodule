@@ -31,27 +31,34 @@ class DatabaseManager:
     
     def _ensure_structure(self):
         """确保目录结构存在"""
-        current_year = datetime.now().year
-        period = f"{current_year}_{current_year + 1}"
-        
-        (self.root_dir / period / "active").mkdir(parents=True, exist_ok=True)
-        (self.root_dir / period / "archive").mkdir(parents=True, exist_ok=True)
+        period = self.get_current_period()
+        (self.root_dir / "archive" / period).mkdir(parents=True, exist_ok=True)
     
     def get_current_period(self) -> str:
-        """获取当前周期"""
+        """获取当前周期（每2年一个周期，如 2026_2027, 2028_2029）"""
         current_year = datetime.now().year
-        return f"{current_year}_{current_year + 1}"
+        cycle_start = (current_year // 2) * 2
+        cycle_end = cycle_start + 1
+        return f"{cycle_start}_{cycle_end}"
     
     def get_db_path(self, db_type: str, year: int = None, month: int = None) -> Path:
-        """获取数据库路径"""
+        """获取数据库路径（与 aex_admin.py 保持一致）"""
         if year is None:
             year = datetime.now().year
         if month is None:
             month = datetime.now().month
         
-        period = f"{year}_{year + 1}"
-        db_name = f"{db_type}_{year}_{month:02d}.db"
-        return self.root_dir / period / "active" / db_name
+        # 使用统一的命名规则，与 aex_admin.py 保持一致
+        if db_type == "emotion":
+            db_name = f"core_memory_{year}_{month:02d}.db"
+        elif db_type == "knowledge":
+            db_name = f"core_knowledge_{year}_{month:02d}.db"
+        elif db_type == "conversation":
+            db_name = f"conversations_{year}_{month:02d}.db"
+        else:
+            db_name = f"{db_type}_{year}_{month:02d}.db"
+        
+        return self.root_dir / db_name
     
     def create_database(self, db_type: str, year: int = None, month: int = None) -> Path:
         """创建新数据库"""
@@ -154,7 +161,7 @@ class DatabaseManager:
         return db_path
     
     def archive_month(self, db_type: str, year: int, month: int):
-        """归档指定月份的数据库"""
+        """归档指定月份的数据库（与 aex_admin.py 周期归档保持一致）"""
         db_path = self.get_db_path(db_type, year, month)
         
         if not db_path.exists():
@@ -163,9 +170,10 @@ class DatabaseManager:
         # 压缩
         pack_path = self.compress_database(db_path)
         
-        # 移动到 archive 目录
-        period = f"{year}_{year + 1}"
-        archive_dir = self.root_dir / period / "archive"
+        # 移动到周期归档目录
+        cycle = self._get_cycle_for_date(year, month)
+        archive_dir = self.root_dir / "archive" / cycle
+        archive_dir.mkdir(parents=True, exist_ok=True)
         archive_path = archive_dir / pack_path.name
         
         shutil.move(str(pack_path), str(archive_path))
@@ -174,6 +182,12 @@ class DatabaseManager:
         db_path.unlink()
         
         return archive_path
+    
+    def _get_cycle_for_date(self, year: int, month: int) -> str:
+        """获取日期所属的周期（每2年一个周期）"""
+        cycle_start = (year // 2) * 2
+        cycle_end = cycle_start + 1
+        return f"{cycle_start}_{cycle_end}"
     
     def query_entries(self, db_type: str, keyword: str = None, limit: int = 10) -> List[Dict]:
         """查询条目"""

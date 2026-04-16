@@ -1434,7 +1434,6 @@ class DatabaseManager:
     def _auto_seal_old_cycles(self):
         """自动封闭旧周期"""
         current_cycle = self._get_current_cycle()
-        current_start = int(current_cycle.split("_")[0])
         
         # 查找需要封闭的周期
         cycles_to_seal = []
@@ -1458,6 +1457,82 @@ class DatabaseManager:
         if confirm("确认封闭这些周期"):
             for cycle in cycles_to_seal:
                 self._seal_cycle(cycle)
+    
+    def auto_expand_and_archive(self, auto_confirm: bool = False) -> Dict[str, Any]:
+        """
+        自动扩展与归档
+        - 归档超过大小限制的轮转数据库
+        - 自动封闭旧周期
+        - 清理过期数据
+        返回操作摘要
+        """
+        result = {
+            "archived_dbs": [],
+            "sealed_cycles": [],
+            "cleaned_files": [],
+            "errors": []
+        }
+        
+        # 1. 检查并归档大文件（超过 1.5GB）
+        dbs = self._list_databases()
+        for db in dbs:
+            if not db.filepath.exists():
+                continue
+            if db.is_rotated and db.size_bytes > (1.5 * 1024 * 1024 * 1024):
+                try:
+                    # 归档到当前周期
+                    cycle = self._get_current_cycle()
+                    archive_dir = self._get_archive_dir(cycle)
+                    dest = archive_dir / db.filepath.name
+                    
+                    # 先压缩再移动
+                    import shutil
+                    shutil.copy2(db.filepath, dest)
+                    db.filepath.unlink()
+                    result["archived_dbs"].append({
+                        "name": db.filename,
+                        "size": db.size_human,
+                        "cycle": cycle
+                    })
+                except Exception as e:
+                    result["errors"].append(f"归档 {db.filename} 失败: {e}")
+        
+        # 2. 自动封闭旧周期（非当前周期）
+        current_cycle = self._get_current_cycle()
+        for file in self.db_dir.glob("*.db"):
+            match = re.search(r'(\d{4})_(\d{2})', file.name)
+            if match and file.name != "master.db":
+                year = int(match.group(1))
+                cycle = self._get_cycle_for_date(year, 1)
+                if cycle != current_cycle and not self._is_cycle_closed(cycle):
+                    try:
+                        self._seal_cycle(cycle)
+                        result["sealed_cycles"].append(cycle)
+                    except Exception as e:
+                        result["errors"].append(f"封闭周期 {cycle} 失败: {e}")
+        
+        # 3. 清理过期数据
+        year, month = get_current_year_month()
+        cutoff_year = year
+        cutoff_month = month - self.config.max_history_months
+        while cutoff_month <= 0:
+            cutoff_year -= 1
+            cutoff_month += 12
+        
+        for file in self.db_dir.glob("*.db"):
+            match = re.search(r'(\d{4})_(\d{2})', file.name)
+            if match and file.name != "master.db":
+                file_year = int(match.group(1))
+                file_month = int(match.group(2))
+                if (file_year < cutoff_year or 
+                    (file_year == cutoff_year and file_month < cutoff_month)):
+                    try:
+                        file.unlink()
+                        result["cleaned_files"].append(file.name)
+                    except Exception as e:
+                        result["errors"].append(f"清理 {file.name} 失败: {e}")
+        
+        return result
     
     def _view_archive_details(self):
         """查看归档详情"""
@@ -1557,11 +1632,21 @@ class DatabaseManager:
         print("\n  🗄️ 数据库状态:")
         dbs = self._list_databases()
         total_size = 0
+        needs_archive = []
         for db in dbs:
             status = "✓" if db.filepath.exists() else "✗"
             total_size += db.size_bytes
             print(f"    {status} {db.chinese_name}: {db.size_human}")
+            # 检查是否需要自动归档（超过 1GB）
+            if db.filepath.exists() and db.size_bytes > (1024 * 1024 * 1024):
+                needs_archive.append(db)
         print(f"    总计: {format_bytes(total_size)}")
+        
+        # 自动归档提示
+        if needs_archive:
+            print(f"\n  ⚠️ 以下数据库超过 1GB，建议归档:")
+            for db in needs_archive:
+                print(f"    - {db.chinese_name}: {db.size_human}")
         
         print("\n  🐍 Python 环境:")
         print(f"    当前 Python: {sys.executable}")
